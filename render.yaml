@@ -1,0 +1,17 @@
+# render.yaml
+# Deployment configuration for Render.com (Web Service)
+# Docs: https://render.com/docs/yaml-spec
+
+services:
+  - type: worker                  # Background worker (no HTTP port needed for polling bot)
+    name: ai-career-assistant-bot
+    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python bot.py"
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false               # Set manually in Render dashboard
+      - key: GEMINI_API_KEY
+        sync: false               # Set manually in Render dashboard
+      - key: PYTHON_VERSION
+        value: "3.11.0"
