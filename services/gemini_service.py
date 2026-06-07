@@ -23,15 +23,42 @@ MODELS = [
 ]
 
 
+async def _call_with_retry(fn, model_name: str, max_retries: int = 2) -> str:
+    """
+    Call a Gemini function with exponential backoff retry for 503 errors.
+    Retries up to max_retries times with 2s, 4s delays.
+    Kept short so the user doesn't wait too long.
+    """
+    for attempt in range(1, max_retries + 1):
+        try:
+            return await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(None, fn),
+                timeout=90.0,
+            )
+        except asyncio.TimeoutError:
+            raise  # bubble up — caller handles it
+        except Exception as e:
+            err_str = str(e)
+            is_503 = "503" in err_str or "UNAVAILABLE" in err_str or "high demand" in err_str.lower()
+            if is_503 and attempt < max_retries:
+                wait = 2 * attempt  # 2s, 4s
+                logger.warning(
+                    f"⏳ {model_name} overloaded (503). "
+                    f"Retrying in {wait}s... ({attempt}/{max_retries})"
+                )
+                await asyncio.sleep(wait)
+                continue
+            raise  # not 503, or retries exhausted
+
+
 async def call_gemini(prompt: str) -> str:
     """
     Send a prompt to Gemini and return the text response.
-    Tries multiple models in order in case one has quota issues.
+    Tries multiple models in order. Retries on 503 with exponential backoff.
     Thinking mode is disabled for fast responses.
     """
     from google.genai import types
 
-    loop = asyncio.get_event_loop()
     last_error = None
 
     for model_name in MODELS:
@@ -39,7 +66,6 @@ async def call_gemini(prompt: str) -> str:
             logger.info(f"Calling Gemini model: {model_name}")
 
             def _generate():
-                # Disable thinking mode → much faster responses
                 config = types.GenerateContentConfig(
                     thinking_config=types.ThinkingConfig(thinking_budget=0)
                 )
@@ -50,25 +76,20 @@ async def call_gemini(prompt: str) -> str:
                         config=config,
                     )
                 except Exception:
-                    # Some models don't support thinking_config — retry without it
                     response = _client.models.generate_content(
                         model=model_name,
                         contents=prompt,
                     )
                 return response.text.strip()
 
-            result = await asyncio.wait_for(
-                loop.run_in_executor(None, _generate),
-                timeout=90.0,
-            )
+            result = await _call_with_retry(_generate, model_name)
             logger.info(f"✅ Gemini responded using {model_name}")
             return result
 
         except asyncio.TimeoutError:
             logger.warning(f"⏱ {model_name} timed out. Trying next model...")
-            last_error = "Request timed out. Please try again."
+            last_error = "Request timed out."
             continue
-
         except Exception as e:
             err_str = str(e)
             if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
@@ -77,6 +98,10 @@ async def call_gemini(prompt: str) -> str:
                 continue
             elif "not found" in err_str.lower() or "404" in err_str:
                 logger.warning(f"⚠ Model {model_name} not found. Trying next model...")
+                last_error = err_str
+                continue
+            elif "503" in err_str or "UNAVAILABLE" in err_str:
+                logger.warning(f"⚠ {model_name} still unavailable after retries. Trying next model...")
                 last_error = err_str
                 continue
             else:
@@ -230,6 +255,69 @@ Format for Telegram: use emojis, bullet points, and section dividers.
 Be encouraging, specific, and actionable.
 """
     return await call_gemini(prompt)
+
+
+async def process_voice_message(audio_bytes: bytes) -> str:
+    """
+    Transcribe a Telegram voice message (OGG format) and generate
+    a career-assistant response using Gemini's multimodal capability.
+    """
+    from google.genai import types
+
+    loop = asyncio.get_event_loop()
+
+    for model_name in MODELS:
+        try:
+            logger.info(f"Processing voice with {model_name}")
+
+            def _process():
+                response = _client.models.generate_content(
+                    model=model_name,
+                    contents=[
+                        types.Part.from_bytes(
+                            data=audio_bytes,
+                            mime_type="audio/ogg",
+                        ),
+                        (
+                            "You are an AI Career Assistant. "
+                            "First, transcribe what the user said in this voice message. "
+                            "Then respond as a professional career coach. "
+                            "If it's a career question (resume, interview, skills, roadmap, LinkedIn), "
+                            "give a detailed, helpful answer. "
+                            "If it's a general greeting, respond warmly and list what you can help with.\n\n"
+                            "Format your response for Telegram:\n"
+                            "\U0001f399\ufe0f *What you said:* <transcription here>\n\n"
+                            "\U0001f4ac *My response:* <career advice here>"
+                        ),
+                    ],
+                )
+                return response.text.strip()
+
+            result = await _call_with_retry(_process, model_name)
+            logger.info(f"\u2705 Voice processed using {model_name}")
+            return result
+
+        except asyncio.TimeoutError:
+            logger.warning(f"\u23f1 Voice timed out for {model_name}. Trying next...")
+            continue
+        except Exception as e:
+            err_str = str(e)
+            if "RESOURCE_EXHAUSTED" in err_str or "429" in err_str or "quota" in err_str.lower():
+                logger.warning(f"\u26a0 Quota issue for {model_name}, trying next...")
+                continue
+            elif "not found" in err_str.lower() or "404" in err_str:
+                logger.warning(f"\u26a0 Model {model_name} not found, trying next...")
+                continue
+            elif "503" in err_str or "UNAVAILABLE" in err_str:
+                logger.warning(f"\u26a0 {model_name} still unavailable after retries. Trying next...")
+                continue
+            else:
+                logger.error(f"Voice processing error: {e}")
+                raise RuntimeError(f"Could not process voice message: {e}")
+
+    raise RuntimeError(
+        "The AI is currently busy. Please send your voice message again in a moment."
+    )
 
 
 async def generate_linkedin_post(topic: str) -> str:

@@ -46,6 +46,7 @@ from handlers.roadmap import roadmap_handler
 from handlers.skills import skills_handler
 from handlers.linkedin import linkedin_handler
 from handlers.callbacks import callback_handler
+from handlers.voice import voice_handler
 
 
 def build_application() -> Application:
@@ -70,6 +71,9 @@ def build_application() -> Application:
 
     # ── Document handler (PDF resume upload) ──────────────────────────────────
     app.add_handler(MessageHandler(filters.Document.ALL, resume_handler))
+
+    # ── Voice message handler ─────────────────────────────────────────────────
+    app.add_handler(MessageHandler(filters.VOICE, voice_handler))
 
     # ── Inline keyboard callback handler ──────────────────────────────────────
     app.add_handler(CallbackQueryHandler(callback_handler))
