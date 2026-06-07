@@ -96,8 +96,7 @@ def main() -> None:
 
             # Run the bot until Ctrl-C is pressed
             app.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,
+                drop_pending_updates=True
             )
             break  # Clean exit (Ctrl+C)
 
