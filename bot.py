@@ -83,48 +83,23 @@ def build_application() -> Application:
 
 
 def main() -> None:
-    """Start the bot in polling mode with auto-retry on network failures."""
+    """Start the bot in polling mode."""
     logger.info("🚀 Starting AI Career Assistant Bot...")
 
-    MAX_RETRIES = 10
-    RETRY_DELAY = 5  # seconds between retries
+    try:
+        # Build the application
+        app = build_application()
+        logger.info("✅ Connected to Telegram API!")
 
-    for attempt in range(1, MAX_RETRIES + 1):
-        try:
-            app = build_application()
-            logger.info(f"✅ Connected to Telegram API! (attempt {attempt})")
+        # Run the bot cleanly 
+        # (run_polling automatically handles internet reconnects internally!)
+        app.run_polling(drop_pending_updates=True)
 
-            # Run the bot until Ctrl-C is pressed
-            app.run_polling(
-                drop_pending_updates=True
-            )
-            break  # Clean exit (Ctrl+C)
-
-        except KeyboardInterrupt:
-            logger.info("🛑 Bot stopped by user (Ctrl+C).")
-            break
-
-        except Exception as e:
-            error_msg = str(e)
-            if attempt < MAX_RETRIES:
-                logger.warning(
-                    f"⚠️  Network error on attempt {attempt}/{MAX_RETRIES}: {error_msg}\n"
-                    f"    Retrying in {RETRY_DELAY} seconds..."
-                )
-                time.sleep(RETRY_DELAY)
-            else:
-                logger.error(
-                    "❌ Failed to connect after %d attempts.\n"
-                    "   Error: %s\n\n"
-                    "💡 TROUBLESHOOTING:\n"
-                    "   1. Check your internet connection\n"
-                    "   2. Try changing DNS to 8.8.8.8 (Google) or 1.1.1.1 (Cloudflare)\n"
-                    "   3. Try enabling/disabling a VPN\n"
-                    "   4. Make sure no firewall is blocking api.telegram.org\n"
-                    "   5. Verify your TELEGRAM_BOT_TOKEN in .env is correct",
-                    MAX_RETRIES, error_msg,
-                )
-                raise
+    except KeyboardInterrupt:
+        logger.info("🛑 Bot stopped by user (Ctrl+C).")
+    except Exception as e:
+        logger.error(f"❌ Failed to run the application. Error: {str(e)}")
+        raise
 
 
 if __name__ == "__main__":
