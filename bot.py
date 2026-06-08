@@ -82,19 +82,44 @@ def build_application() -> Application:
     return app
 
 
-def main() -> None:
-    """Start the bot in polling mode."""
-    logger.info("🚀 Starting AI Career Assistant Bot...")
+import asyncio
 
+async def run_bot() -> None:
+    """Initialize and start the application loop cleanly."""
+    app = build_application()
+    
+    # Initialize the application components (handlers, etc.)
+    await app.initialize()
+    
+    # Start the network polling process
+    await app.updater.start_polling(drop_pending_updates=True)
+    
+    # Start the runtime execution context
+    await app.start()
+    
+    logger.info("🤖 Bot is now live and polling for updates...")
+    
+    # Keep running seamlessly until interrupted
     try:
-        # Build the application
-        app = build_application()
-        logger.info("✅ Connected to Telegram API!")
+        while True:
+            await asyncio.sleep(3600)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("🛑 Shutting down bot processes...")
+    finally:
+        # Graceful cleanup layout
+        if app.updater.running:
+            await app.updater.stop()
+        if app.running:
+            await app.stop()
+        await app.shutdown()
 
-        # Run the bot cleanly 
-        # (run_polling automatically handles internet reconnects internally!)
-        app.run_polling(drop_pending_updates=True)
 
+def main() -> None:
+    """Main entry point configuration."""
+    logger.info("🚀 Starting AI Career Assistant Bot...")
+    try:
+        # Explicitly run the main coroutine using modern asyncio handling
+        asyncio.run(run_bot())
     except KeyboardInterrupt:
         logger.info("🛑 Bot stopped by user (Ctrl+C).")
     except Exception as e:
