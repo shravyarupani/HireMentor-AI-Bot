@@ -115,7 +115,7 @@ You should see:
 
 ---
 
-## 🚀 Deploy on Render
+## 🚀 Deployed on Railway
 
 ### Step 1 — Push to GitHub
 ```bash
