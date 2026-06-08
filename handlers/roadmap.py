@@ -53,7 +53,6 @@ async def roadmap_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             reply_markup = get_back_keyboard() if i == len(chunks) - 1 else None
             await update.message.reply_text(
                 chunk,
-                parse_mode="Markdown",
                 reply_markup=reply_markup,
             )
 
